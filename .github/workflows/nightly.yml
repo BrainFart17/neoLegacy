@@ -44,7 +44,6 @@ jobs:
         run: |
           $source = "./build/windows64/Minecraft.Client/Release"
           $zip = "neoLegacyWindows64.zip"
-          $topLevel = "neoLegacyWindows64"
           
           # Collect files, excluding unwanted extensions
           $files = Get-ChildItem -Path $source -Recurse -File |
@@ -61,12 +60,12 @@ jobs:
               # Add directories
               Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
                 $rel = $_.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $archive.CreateEntry("$topLevel/$($rel -replace '\\','/')/") | Out-Null
+                $archive.CreateEntry("$($rel -replace '\\','/')/") | Out-Null
               }
               # Add files
               foreach ($file in $files) {
                 $rel = $file.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $entryName = "$topLevel/$($rel -replace '\\','/')"
+                $entryName = "$($rel -replace '\\','/')"
                 [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                   $archive, $file.FullName, $entryName,
                   [System.IO.Compression.CompressionLevel]::Optimal
@@ -118,7 +117,6 @@ jobs:
         run: |
           $source = "./build/windows64/Minecraft.Server/Release"
           $zip = "neoLegacyServerWindows64.zip"
-          $topLevel = "neoLegacyServerWindows64"
           
           $files = Get-ChildItem -Path $source -Recurse -File |
             Where-Object { $_.Extension -notin '.pch', '.zip', '.ipdb', '.iobj' }
@@ -133,11 +131,11 @@ jobs:
             try {
               Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
                 $rel = $_.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $archive.CreateEntry("$topLevel/$($rel -replace '\\','/')/") | Out-Null
+                $archive.CreateEntry("$($rel -replace '\\','/')/") | Out-Null
               }
               foreach ($file in $files) {
                 $rel = $file.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $entryName = "$topLevel/$($rel -replace '\\','/')"
+                $entryName = "$($rel -replace '\\','/')"
                 [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                   $archive, $file.FullName, $entryName,
                   [System.IO.Compression.CompressionLevel]::Optimal
