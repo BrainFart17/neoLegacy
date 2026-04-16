@@ -136,7 +136,7 @@ private:
 public:
 
 	static const int MAX_HANGING_ENTITIES = 400;
-	static const int MAX_ITEM_ENTITIES = 200;
+	static const int MAX_ITEM_ENTITIES = 1000;
 	static const int MAX_ARROW_ENTITIES = 200;
 	static const int MAX_EXPERIENCEORB_ENTITIES = 50;
 	static const int MAX_PRIMED_TNT = 20;
