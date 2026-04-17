@@ -1,10 +1,6 @@
 name: Nightly Release
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+on: workflow_dispatch
 
 permissions:
   contents: write
