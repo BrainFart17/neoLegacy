@@ -107,40 +107,38 @@ jobs:
       with:
         global-json-file: global.json
 
-      - name: Zip Build
-        shell: pwsh
-        run: |
-          $source = "./build/windows64/Minecraft.Server/Release"
-          $zip = "neoLegacyServerWindows64.zip"
-          
-          $files = Get-ChildItem -Path $source -Recurse -File |
-            Where-Object { $_.Extension -notin '.pch', '.zip', '.ipdb', '.iobj' }
-          
-          Add-Type -AssemblyName System.IO.Compression
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          
-          $basePath = (Resolve-Path $source).Path
-          $fs = [System.IO.File]::Open($zip, [System.IO.FileMode]::Create)
+    - name: Zip Build
+      shell: pwsh
+      run: |
+        $source = "./build/windows64/Minecraft.Server/Release"
+        $zip = "neoLegacyServerWindows64.zip"
+        
+        $files = Get-ChildItem -Path $source -Recurse -File |
+          Where-Object { $_.Extension -notin '.pch', '.zip', '.ipdb', '.iobj' }
+        
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        
+        $basePath = (Resolve-Path $source).Path
+        $fs = [System.IO.File]::Open($zip, [System.IO.FileMode]::Create)
+        try {
+          $archive = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
           try {
-            $archive = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
-            try {
-              Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
-                $rel = $_.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $archive.CreateEntry("$($rel -replace '\\','/')/") | Out-Null
-              }
-              foreach ($file in $files) {
-                $rel = $file.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $entryName = "$($rel -replace '\\','/')"
-                [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-                  $archive, $file.FullName, $entryName,
-                  [System.IO.Compression.CompressionLevel]::Optimal
-                ) | Out-Null
-              }
-            } finally { $archive.Dispose() }
-          } finally { $fs.Dispose() }
-          
-          Write-Host "Created $zip"
-
+            Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
+              $rel = $_.FullName.Substring($basePath.Length).TrimStart('\', '/')
+              $archive.CreateEntry("$($rel -replace '\\','/')/") | Out-Null
+            }
+            foreach ($file in $files) {
+              $rel = $file.FullName.Substring($basePath.Length).TrimStart('\', '/')
+              $entryName = "$($rel -replace '\\','/')"
+              [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, $file.FullName, $entryName,
+                [System.IO.Compression.CompressionLevel]::Optimal
+              ) | Out-Null
+            }
+          } finally { $archive.Dispose() }
+        } finally { $fs.Dispose() }
+        
         Write-Host "Created $zip"
 
     - name: Zip Build (FourKit)
