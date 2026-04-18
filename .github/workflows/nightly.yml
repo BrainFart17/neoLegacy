@@ -44,7 +44,6 @@ jobs:
         run: |
           $source = "./build/windows64/Minecraft.Client/Release"
           $zip = "neoLegacyWindows64.zip"
-          $topLevel = "neoLegacyWindows64"
           
           # Collect files, excluding unwanted extensions
           $files = Get-ChildItem -Path $source -Recurse -File |
@@ -61,12 +60,12 @@ jobs:
               # Add directories
               Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
                 $rel = $_.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $archive.CreateEntry("$topLevel/$($rel -replace '\\','/')/") | Out-Null
+                $archive.CreateEntry("$($rel -replace '\\','/')/") | Out-Null
               }
               # Add files
               foreach ($file in $files) {
                 $rel = $file.FullName.Substring($basePath.Length).TrimStart('\', '/')
-                $entryName = "$topLevel/$($rel -replace '\\','/')"
+                $entryName = "$($rel -replace '\\','/')"
                 [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                   $archive, $file.FullName, $entryName,
                   [System.IO.Compression.CompressionLevel]::Optimal
@@ -108,26 +107,18 @@ jobs:
       with:
         global-json-file: global.json
 
-    - name: Run CMake
-      uses: lukka/run-cmake@v10
-      env:
-        VCPKG_ROOT: ""
-      with:
-        configurePreset: windows64
-        buildPreset: windows64-release
-        buildPresetAdditionalArgs: "['--target', 'Minecraft.Server', '--target', 'Minecraft.Server.FourKit']"
-
-    - name: Zip Build (vanilla)
+    - name: Zip Build
       shell: pwsh
       run: |
         $source = "./build/windows64/Minecraft.Server/Release"
         $zip = "neoLegacyServerWindows64.zip"
-        $topLevel = "neoLegacyServerWindows64"
+        
         $files = Get-ChildItem -Path $source -Recurse -File |
           Where-Object { $_.Extension -notin '.pch', '.zip', '.ipdb', '.iobj' }
-
+        
         Add-Type -AssemblyName System.IO.Compression
         Add-Type -AssemblyName System.IO.Compression.FileSystem
+        
         $basePath = (Resolve-Path $source).Path
         $fs = [System.IO.File]::Open($zip, [System.IO.FileMode]::Create)
         try {
@@ -135,11 +126,11 @@ jobs:
           try {
             Get-ChildItem -Path $basePath -Recurse -Directory | ForEach-Object {
               $rel = $_.FullName.Substring($basePath.Length).TrimStart('\', '/')
-              $archive.CreateEntry("$topLevel/$($rel -replace '\\','/')/") | Out-Null
+              $archive.CreateEntry("$($rel -replace '\\','/')/") | Out-Null
             }
             foreach ($file in $files) {
               $rel = $file.FullName.Substring($basePath.Length).TrimStart('\', '/')
-              $entryName = "$topLevel/$($rel -replace '\\','/')"
+              $entryName = "$($rel -replace '\\','/')"
               [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                 $archive, $file.FullName, $entryName,
                 [System.IO.Compression.CompressionLevel]::Optimal
@@ -147,7 +138,7 @@ jobs:
             }
           } finally { $archive.Dispose() }
         } finally { $fs.Dispose() }
-
+        
         Write-Host "Created $zip"
 
     - name: Zip Build (FourKit)
