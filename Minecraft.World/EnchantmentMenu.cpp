@@ -9,6 +9,10 @@
 #include "../../../Minecraft.Client/ServerPlayer.h"
 #include "../../../Minecraft.Client/MinecraftServer.h"
 #include "../../../Minecraft.Client/PlayerList.h"
+#include "../../../Minecraft.Client/MultiPlayerLocalPlayer.h"
+#include "../../../Minecraft.Client/PlayerConnection.h"
+#include "../../../Minecraft.World/CustomPayloadPacket.h"
+#include "../../../Minecraft.Client/Minecraft.h"
 
 EnchantmentMenu::EnchantmentMenu(shared_ptr<Inventory> inventory, Level *level, int xt, int yt, int zt)
 {
@@ -99,6 +103,16 @@ void EnchantmentMenu::slotsChanged(int a) // 4J used to take a shared_ptr<Contai
 
 	if (item == nullptr || !item->isEnchantable())
 	{
+		if (!level->isClientSide)
+		{
+			ByteArrayOutputStream baos;
+			DataOutputStream dos(&baos);
+			//send reset signal
+			dos.writeInt(-4);
+
+			PlayerList* playerList = MinecraftServer::getInstance()->getPlayers();
+			playerList->broadcastAll(std::make_shared<CustomPayloadPacket>(CustomPayloadPacket::ENCHANTMENT_LIST_PACKET, baos.toByteArray()));
+		}
 		for (int i = 0; i < 3; i++)
 		{
 			tempCosts[i] = costs[i];
@@ -162,6 +176,7 @@ void EnchantmentMenu::slotsChanged(int a) // 4J used to take a shared_ptr<Contai
 			{
 				costs[i] = EnchantmentHelper::getEnchantmentCost(&random, i, bookcases, item);
 			}
+			std::sort(costs, costs + 3);
 			if (!alreadyRan) {
 				en = false;
 				for (int i = 0; i < 3; i++)
@@ -169,7 +184,33 @@ void EnchantmentMenu::slotsChanged(int a) // 4J used to take a shared_ptr<Contai
 					//delete cachedEnchantments[i]; // clean up old one first <- doing it elsewhere
 					cachedEnchantments[i] = EnchantmentHelper::selectEnchantment(&random, item, costs[i]);
 				}
-				
+				ByteArrayOutputStream baos;
+				DataOutputStream dos(&baos);
+				//dos.writeInt(playerT->enchantmentSeed);
+				int b = 0;
+
+				for (int a = 0; a < 3; a++) {
+					vector<EnchantmentInstance*>* newEnchantment = cachedEnchantments[a];
+					if (newEnchantment != nullptr) {
+						for (int index = 0; index < newEnchantment->size(); index++)
+						{
+							EnchantmentInstance* e = newEnchantment->at(index);
+							dos.writeInt(e->enchantment->id);
+							dos.writeInt(e->level);
+							//delete e;
+						}
+					}
+					else {
+						dos.writeInt(-3);
+						dos.writeInt(-3);
+					}
+					dos.writeInt(-1);
+				}
+				dos.writeInt(-2);
+
+				//MinecraftServer::getInstance()->getPlayers()->players[0]->connection->send(std::make_shared<CustomPayloadPacket>(CustomPayloadPacket::ENCHANTMENT_LIST_PACKET, baos.toByteArray()));
+				PlayerList* playerList = MinecraftServer::getInstance()->getPlayers();
+				playerList->broadcastAll(std::make_shared<CustomPayloadPacket>(CustomPayloadPacket::ENCHANTMENT_LIST_PACKET, baos.toByteArray()));
 			}
 			
 			alreadyRan = true;
@@ -228,7 +269,7 @@ bool EnchantmentMenu::clickMenuButton(shared_ptr<Player> player, int i)
 	return false;
 }
 
-EnchantmentInstance* EnchantmentMenu::predictEnchantment(shared_ptr<Player> player, int i)
+EnchantmentInstance* EnchantmentMenu::predictEnchantment(Player* player, int i)
 {
 	shared_ptr<ItemInstance> item = enchantSlots->getItem(0);
 	if (costs[i] > 0 && item != nullptr && (player->experienceLevel >= costs[i] || player->abilities.instabuild))

@@ -14,7 +14,9 @@
 #include "../../PlayerList.h"
 #include "../../Minecraft.h"
 #include "../../Options.h"
-
+#include "../../Minecraft.World/Level.h"
+#include "../../MultiplayerLevel.h"
+#include "../../../Minecraft.World/Enchantment.h"
 #ifdef __ORBIS__
 #include <pad.h>
 #endif
@@ -33,6 +35,7 @@ IUIScene_AbstractContainerMenu::IUIScene_AbstractContainerMenu()
 	m_pointerPos.y = 0.0f;
 	m_bPointerDrivenByMouse = false;
 
+	m_iLastMouseTickTimeNs = -1;
 }
 
 IUIScene_AbstractContainerMenu::~IUIScene_AbstractContainerMenu()
@@ -269,48 +272,66 @@ void IUIScene_AbstractContainerMenu::UpdateTooltips()
 }
 
 void IUIScene_AbstractContainerMenu::handleEnchantButton(int slot, int iPad) {
-	UIScene* t = ui.FindScene(eUIScene_EnchantingMenu);
-	MinecraftServer* aMinecraft = MinecraftServer::getInstance();
-	EnchantmentMenu* menu = dynamic_cast<EnchantmentMenu*>(aMinecraft->getPlayers()->players[iPad]->containerMenu);
+	EnchantmentMenu* menu = new EnchantmentMenu(Minecraft::GetInstance()->player->inventory, dynamic_cast<Level*>(Minecraft::GetInstance()->level), 0, 0, 0);
+	if (0 == 0) { //uhh don't worry that is temporary
+		int lapisCost = slot + 1; // slot 0 = 1 lapis, slot 1 = 2, slot 2 = 3
+		
+		Minecraft* pMinecraft = Minecraft::GetInstance();
+		auto player = pMinecraft->player;
+		if (player->enchantmentEntries[slot].id == -3) return;
 
-	if (menu->en == false && menu->cachedEnchantments[slot] != nullptr) {
-		EnchantmentInstance* a = menu->cachedEnchantments[slot]->at(0);
-		if (a != nullptr) {
-			int lapisCost = slot + 1; // slot 0 = 1 lapis, slot 1 = 2, slot 2 = 3
+		EnchantmentMenu* menu = dynamic_cast<EnchantmentMenu*>(player->containerMenu);
 
-			HtmlString title = HtmlString(
-				wstring(app.GetString(a->enchantment->enchantments[a->enchantment->id]->getDescriptionId())) +
-				L" " +
-				a->enchantment->enchantments[a->enchantment->id]->getLevelString(a->level) +
-				L"...?",
-				eHTMLColor_White
-			);
+		HtmlString title = HtmlString(
+			wstring(app.GetString(Enchantment::enchantments[player->enchantmentEntries[slot].id]->getDescriptionId())) +
+			L" " +
+			Enchantment::enchantments[player->enchantmentEntries[slot].id]->getLevelString(player->enchantmentEntries[slot].level) +
+			L"...?",
+			eHTMLColor_White
+		);
 
-			bool costEnough = aMinecraft->getPlayers()->players[iPad]->experienceLevel >= menu->costs[slot];
-			bool enough = menu->getLapisCount() >= lapisCost;
-			eMinecraftColour col = enough ? eHTMLColor_7 : eHTMLColor_c;
-			eMinecraftColour colCost = costEnough ? eHTMLColor_7 : eHTMLColor_c;
+		bool costEnough = Minecraft::GetInstance()->player->experienceLevel >= menu->costs[slot];
+		bool enough = menu->getLapisCount() >= lapisCost;
+		eMinecraftColour col = enough ? eHTMLColor_7 : eHTMLColor_c;
+		eMinecraftColour colCost = costEnough ? eHTMLColor_7 : eHTMLColor_c;
 
-			std::wstring message = costEnough
-				? std::to_wstring(slot + 1) + (slot == 0 ? L" Enchantment Level" : L" Enchantment Levels")
-				: L"Level Requirement: " + std::to_wstring(menu->costs[slot]);
+		std::wstring message = costEnough
+						? std::to_wstring(slot + 1) + (slot == 0 ? L" Enchantment Level" : L" Enchantment Levels")
+						: L"Level Requirement: " + std::to_wstring(menu->costs[slot]);
 
-			vector<HtmlString>* lines = new vector<HtmlString>();
-			lines->push_back(title);
-			if (!aMinecraft->getPlayers()->players[iPad]->abilities.instabuild) {
-				lines->push_back(HtmlString(L"")); // title1 blank line
-				if (costEnough) {
-					lines->push_back(HtmlString(std::to_wstring(lapisCost) + L" Lapis Lazuli", col));
-				}
-				lines->push_back(HtmlString(message, colCost));
+		vector<HtmlString>* lines = new vector<HtmlString>();
+		lines->push_back(title);
+
+		if (!Minecraft::GetInstance()->player->abilities.instabuild) {
+			lines->push_back(HtmlString(L"")); // title1 blank line
+			if (costEnough) {
+				lines->push_back(HtmlString(std::to_wstring(lapisCost) + L" Lapis Lazuli", col));
 			}
-			SetPointerText(lines, false);
+			lines->push_back(HtmlString(message, colCost));
 		}
+
+		SetPointerText(lines, false);
+		return;
 	}
-	};
+};
 
 void IUIScene_AbstractContainerMenu::onMouseTick()
 {
+	// Frame-rate independent cursor input, normalized to a 60Hz reference frame.
+	const int64_t kRefFrameNs = 1000000000LL / 60;
+	const int64_t kMinDeltaNs = 1000000LL;
+	const int64_t kMaxDeltaNs = 100000000LL;
+	int64_t iNowNs = System::nanoTime();
+	float fFrameScale = 1.0f;
+	if ( m_iLastMouseTickTimeNs > 0 )
+	{
+		int64_t iDeltaNs = iNowNs - m_iLastMouseTickTimeNs;
+		if ( iDeltaNs < kMinDeltaNs ) iDeltaNs = kMinDeltaNs;
+		if ( iDeltaNs > kMaxDeltaNs ) iDeltaNs = kMaxDeltaNs;
+		fFrameScale = static_cast<float>(iDeltaNs) / static_cast<float>(kRefFrameNs);
+	}
+	m_iLastMouseTickTimeNs = iNowNs;
+
 	Minecraft *pMinecraft = Minecraft::GetInstance();
 	if( pMinecraft->localgameModes[getPad()] != nullptr)
 	{
@@ -467,10 +488,10 @@ void IUIScene_AbstractContainerMenu::onMouseTick()
 		// The SD/splitscreen scenes are approximately 0.6 times the size of the fullscreen on
 		if(!RenderManager.IsHiDef() || app.GetLocalPlayerCount() > 1) fInputScale *= 0.6f;
 
-		fInputX *= fInputScale;
-		fInputY *= fInputScale;
+		fInputX *= fInputScale * fFrameScale;
+		fInputY *= fInputScale * fFrameScale;
 
-#ifdef USE_POINTER_ACCEL		
+#ifdef USE_POINTER_ACCEL
 		m_fPointerAccelX += fInputX / 50.0f;
 		m_fPointerAccelY += fInputY / 50.0f;
 
@@ -1317,36 +1338,8 @@ void IUIScene_AbstractContainerMenu::onMouseTick()
 	vPointerPos.x -= m_fPointerImageOffsetX;
 	vPointerPos.y -= m_fPointerImageOffsetY;
 
-	// Update pointer position.
-	// 4J-PB - do not allow sub pixel positions or we get broken lines in box edges
-
-	// problem here when sensitivity is low - we'll be moving a sub pixel size, so it'll clamp, and we'll never move. In that case, move 1 pixel
-	if(fInputDirX!=0.0f)
-	{
-		if(fInputDirX==1.0f)
-		{
-			vPointerPos.x+=0.999999f;
-		}
-		else
-		{
-			vPointerPos.x-=0.999999f;
-		}
-	}
-
-	if(fInputDirY!=0.0f)
-	{
-		if(fInputDirY==1.0f)
-		{
-			vPointerPos.y+=0.999999f;
-		}
-		else
-		{
-			vPointerPos.y-=0.999999f;
-		}
-	}
-
-	vPointerPos.x = static_cast<float>(floor(vPointerPos.x + 0.5f));
-	vPointerPos.y = static_cast<float>(floor(vPointerPos.y + 0.5f));
+	// Keep sub-pixel float state so deltas <1px accumulate across frames; the renderer
+	// truncates to integer pixels when emitting the Iggy mouse event.
 	m_pointerPos = vPointerPos;
 
 	adjustPointerForSafeZone();

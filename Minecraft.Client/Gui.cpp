@@ -499,11 +499,10 @@ void Gui::render(float a, bool mouseFree, int xMouse, int yMouse)
 
 					int y0 = 0;
 
-					// No hardcore on console
-					/*if (minecraft->level.getLevelData().isHardcore())
-					{
-						y0 = 5;
-					}*/
+					//if (minecraft->level->getLevelData()->isHardcore())
+					//{
+					//	y0 = 5;
+					//}
 
 					blit(xo, yo, 16 + bg * 9, 9 * y0, 9, 9);
 					if (blink)
@@ -854,10 +853,11 @@ void Gui::render(float a, bool mouseFree, int xMouse, int yMouse)
 	//            font.draw(str, x + 1, y, 0xffffff);
 	//        }
 
+
 	lastTickA = a;
 	// 4J Stu - This is now displayed in a xui scene
 #if 0
-	// Jukebox CD message
+// Jukebox CD message
     if (overlayMessageTime > 0)
 	{
         float t = overlayMessageTime - a;
@@ -1064,8 +1064,16 @@ void Gui::render(float a, bool mouseFree, int xMouse, int yMouse)
 
         vector<wstring> lines;
 
+        // Only show version/branch for player 0 to avoid cluttering each splitscreen viewport
+        if (iPad == 0 && ClientConstants::SHOW_VERSION_WATERMARK)
+        {
+            lines.push_back(ClientConstants::VERSION_STRING);
+            lines.push_back(ClientConstants::BRANCH_STRING);
+        }
+
         if (minecraft->options->renderDebug && minecraft->player != nullptr && minecraft->level != nullptr)
         {
+            lines.push_back(std::wstring(VER_BRANCHVERSION_STR_W) + L"/" + std::wstring(VER_PRODUCTVERSION_STR_W));
             lines.push_back(minecraft->fpsString);
             lines.push_back(L"E: " + std::to_wstring(minecraft->level->getAllEntities().size()));
             int renderDistance = app.GetGameSettings(iPad, eGameSetting_RenderDistance);
@@ -1202,7 +1210,20 @@ void Gui::render(float a, bool mouseFree, int xMouse, int yMouse)
 
 		// Disable the depth test so the text shows on top of the paperdoll
         glDisable(GL_DEPTH_TEST);
+#ifdef _WINDOWS64
+		float scaleWidth = (g_rScreenWidth / 1920.0f);
+		float scaleHeight = (g_rScreenHeight / 1080.0f);
 
+		float scale = min(scaleWidth, scaleHeight); //stop stretching
+
+		if (scale < 0.5f) scale = 0.5f; // force minimum scale
+        if (scale > 1.2f) // resolutions over 1296 pixels tall
+        {
+			scale = scale - 0.33f; // tame overscaling on 1440p
+		}
+			
+		glScalef(scale, scale, 1);
+#endif
         // Loop through the lines and draw them all on screen
         int yPos = debugTop;
         for (const auto &line : lines)
@@ -1211,6 +1232,9 @@ void Gui::render(float a, bool mouseFree, int xMouse, int yMouse)
             yPos += 10;
         }
 
+#ifdef _WINDOWS64
+		glScalef(1, 1, 1);
+#endif
 		// Restore the depth test
         glEnable(GL_DEPTH_TEST);
 
@@ -1415,9 +1439,43 @@ void Gui::clearMessages(int iPad)
 	}
 }
 
+int getVisibleMessageLength(const wstring& _string) {
+	int visibleMessageLength = 0;
+	bool inHtmlTag = false;
+
+	for (wchar_t _char : _string) {
+		if (_char == L'<') inHtmlTag = true;
+		if (_char == L'>') inHtmlTag = false;
+
+		if (!inHtmlTag) visibleMessageLength++;
+	}
+
+	return visibleMessageLength;
+}
+
+int getVisibleIndexToRaw(const wstring& _string, size_t target) {
+	int visibleMessageLength = 0;
+	bool inHtmlTag = false;
+
+	for (size_t i = 0; i < _string.size(); i++) {
+		if (_string[i] == L'<') inHtmlTag = true;
+		if (_string[i] == L'>') inHtmlTag = false;
+
+		if (!inHtmlTag) {
+			if (visibleMessageLength == target) return i;
+
+			visibleMessageLength++;
+		}
+	}
+	return _string.size();
+}
+
 
 void Gui::addMessage(const wstring& _string,int iPad,bool bIsDeathMessage)
 {
+	{ char buf[32]; sprintf_s(buf, "[CHAT] Display (pad=%d): ", iPad); OutputDebugStringA(buf); }
+	OutputDebugStringW(_string.c_str());
+	OutputDebugStringA("\n");
 	wstring string = _string;	// 4J - Take copy of input as it is const
 	//int iScale=1;
 
@@ -1495,29 +1553,25 @@ void Gui::addMessage(const wstring& _string,int iPad,bool bIsDeathMessage)
 		break;
 	}
 
-
-	while (string.length() > maximumChars)
+	while (getVisibleMessageLength(string) > maximumChars)
 	{
-        unsigned int i = 1;
-        while (i < string.length() && (i + 1) <= maximumChars)
-		{
-            i++;
-        }
-		size_t iLast=string.find_last_of(L" ",i);
+		size_t cutOffset = getVisibleIndexToRaw(string, maximumChars);
+
+		size_t iLast=string.find_last_of(L" ", cutOffset);
 		switch(XGetLanguage())
 		{
 			case XC_LANGUAGE_JAPANESE:
 			case XC_LANGUAGE_TCHINESE:
 			case XC_LANGUAGE_KOREAN:
-				iLast = maximumChars;
+				iLast = cutOffset;
 				break;
 			default:
-				iLast=string.find_last_of(L" ",i);
+				iLast=string.find_last_of(L" ", cutOffset);
 				break;
 		}
 
 		// if a space was found, include the space on this line
-		if(iLast!=i)
+		if(iLast!=cutOffset)
 		{
 			iLast++;
 		}
@@ -1569,6 +1623,13 @@ float Gui::getOpacity(int iPad, DWORD index)
 	return opacityPercentage;
 }
 
+//just like java functionality it overwrites the jukebox label
+void Gui::setActionBarMessage(wstring message)
+{
+	overlayMessageString = message;
+	overlayMessageTime = 20 * 4; //idk how long it should last, need to check java usage
+}
+
 float Gui::getJukeboxOpacity(int iPad)
 {
 	float t = overlayMessageTime - lastTickA;
@@ -1584,7 +1645,7 @@ void Gui::setNowPlaying(const wstring& string)
 //	overlayMessageString = L"Now playing: " + string;
 	overlayMessageString = app.GetString(IDS_NOWPLAYING) + string;
     overlayMessageTime = 20 * 3;
-    animateOverlayMessageColor = true;
+    animateOverlayMessageColor = true; //appears to be unused, @DrPerkyLegit plans to add in later pr
 }
 
 void Gui::displayClientMessage(int messageId, int iPad)
